@@ -1,0 +1,12 @@
+langchain
+langgraph
+langchain-groq
+langchain-core
+fastapi[all]
+langchain-community
+python-dotenv
+langgraph-checkpoint-sqlite
+langchain_huggingface
+faiss-cpu 
+sentence-transformers
+aiosqlite

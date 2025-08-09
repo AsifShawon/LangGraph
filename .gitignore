@@ -2,4 +2,4 @@
 
 /LetsChat
 
-/.env
+*.env
