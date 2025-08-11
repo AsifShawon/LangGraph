@@ -11,7 +11,8 @@ import logging
 
 from config import Config
 from tools import create_tools
-from utils import extract_tool_calls
+# We will use this utility to format the conversation for the summarizer
+from utils import extract_tool_calls, format_messages_for_display
 from memory_manager import memory_manager
 
 # Configure logging
@@ -19,17 +20,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class AgentState(TypedDict):
-    """State for our agent with long-term memory support."""
+    """State for our agent with summarization-based memory."""
     messages: Annotated[Sequence[BaseMessage], add_messages]
     tool_calls: List[Dict[str, Any]]
     iteration_count: int
     error_count: int
     last_error: str
+    # 'summary' is now the primary context carrier
     summary: str
-    retrieved_context: str
 
 class LangGraphAgent:
-    """Main agent class with integrated smart memory"""
+    """Main agent class with integrated summarization memory"""
 
     def __init__(self):
         Config.validate()
@@ -40,11 +41,13 @@ class LangGraphAgent:
             timeout=Config.TIMEOUT
         )
         self.tools = create_tools(Config.BRAVE_API_KEY)
+        
+        # --- MODIFICATION: System prompt now uses a 'summary' ---
         self.system_prompt_template = """You are an intelligent and efficient assistant.
-Here is some relevant context from our past conversations:
-{retrieved_context}
+Here is a summary of our past conversation:
+{summary}
 
-Use this context to inform your response. You have access to tools for searching, getting the time, and checking weather.
+Based on this summary and the latest message, provide a helpful response. You have access to tools for searching, getting the time, and checking weather.
 Guidelines:
 - Use tools in sequence if a query requires multiple steps.
 - Interpret and present tool data clearly.
@@ -52,24 +55,25 @@ Guidelines:
 """
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         self.graph_definition = self._build_graph_definition()
-        logger.info("Agent with smart memory initialized successfully")
+        logger.info("Agent with summarization memory initialized successfully")
 
     def _build_graph_definition(self) -> StateGraph:
         """
-        Builds the graph structure without compiling it.
-        This allows us to attach a different checkpointer for each run.
+        Builds the graph structure with a summarization step.
         """
         graph = StateGraph(AgentState)
         
-        retrieve_context_runnable = RunnableLambda(self._retrieve_context_node)
+        # Create a runnable for the new summarization node
+        summarize_runnable = RunnableLambda(self._summarize_conversation_node)
         
-        graph.add_node("retrieve_context", retrieve_context_runnable)
+        # The graph now starts with summarization
+        graph.add_node("summarize_conversation", summarize_runnable)
         graph.add_node("agent", self._agent_node)
         graph.add_node("tools", ToolNode(self.tools))
         graph.add_node("error_handler", self._error_handler_node)
 
-        graph.add_edge(START, "retrieve_context")
-        graph.add_edge("retrieve_context", "agent")
+        graph.add_edge(START, "summarize_conversation")
+        graph.add_edge("summarize_conversation", "agent")
         graph.add_edge("tools", "agent")
         graph.add_edge("error_handler", "agent")
 
@@ -80,29 +84,53 @@ Guidelines:
         )
         return graph
 
-    def _retrieve_context_node(self, state: AgentState, config: Dict) -> AgentState:
-        thread_id = config["configurable"]["thread_id"]
-        last_user_message = state["messages"][-1].content
-        retriever = memory_manager.get_retriever(thread_id)
-        retrieved_context = ""
-        if retriever:
-            try:
-                retrieved_docs = retriever.invoke(last_user_message)
-                retrieved_context = "\n".join([doc.page_content for doc in retrieved_docs])
-                logger.info(f"Retrieved context for thread {thread_id}: {retrieved_context}")
-            except Exception as e:
-                logger.error(f"Error retrieving context: {e}")
-        return {"retrieved_context": retrieved_context}
+    def _summarize_conversation_node(self, state: AgentState) -> Dict[str, Any]:
+        """
+        Summarizes the conversation history to provide context to the agent.
+        """
+        history = state.get("messages", [])
+        # We only summarize if there's a history to process
+        if len(history) <= 1:
+            return {"summary": "No prior conversation history."}
+
+        # Summarize all messages except the very last one (the user's current input)
+        messages_to_summarize = history[:-1]
+        history_str = format_messages_for_display(messages_to_summarize)
+        
+        summarization_prompt = f"""
+Please create a concise summary of the following conversation.
+Focus on key facts, user preferences, and important topics discussed.
+This summary will be used to give an AI assistant context for its next response.
+
+Conversation History:
+{history_str}
+
+Concise Summary:
+"""
+        try:
+            summary_response = self.llm.invoke(summarization_prompt)
+            summary = summary_response.content
+            logger.info(f"Generated summary: {summary}")
+            return {"summary": summary}
+        except Exception as e:
+            logger.error(f"Error during summarization: {e}")
+            return {"summary": "Error summarizing conversation."}
 
     def _agent_node(self, state: AgentState) -> AgentState:
+        """The main agent logic node, now using the summary for context."""
         try:
+            # Use the generated summary for context
             system_prompt = SystemMessage(
                 content=self.system_prompt_template.format(
-                    retrieved_context=state.get("retrieved_context", "No context found.")
+                    summary=state.get("summary", "No summary available.")
                 )
             )
-            messages_with_system_prompt = [system_prompt] + state["messages"]
-            response = self.llm_with_tools.invoke(messages_with_system_prompt)
+            
+            # Send only the system prompt and the latest user message
+            messages_to_send = [system_prompt, state["messages"][-1]]
+            
+            response = self.llm_with_tools.invoke(messages_to_send)
+            
             return {
                 "messages": [response],
                 "tool_calls": extract_tool_calls(response),
@@ -128,55 +156,24 @@ Guidelines:
             return "end"
         return "end"
 
-    def _get_final_messages_safely(self, checkpointer, config, result):
-        """
-        Safely extract final messages from different checkpointer formats
-        """
-        try:
-            # Try the new format first
-            checkpoint = checkpointer.get(config)
-            if checkpoint and hasattr(checkpoint, 'channel_values'):
-                return checkpoint.channel_values.get('messages', [])
-            
-            # Try dictionary format
-            elif isinstance(checkpoint, dict):
-                if 'messages' in checkpoint:
-                    return checkpoint['messages']
-                elif 'channel_values' in checkpoint and 'messages' in checkpoint['channel_values']:
-                    return checkpoint['channel_values']['messages']
-            
-            # Fall back to result messages if checkpoint doesn't work
-            if result and 'messages' in result:
-                return result['messages']
-                
-            logger.warning("Could not extract messages from checkpoint, using empty list")
-            return []
-            
-        except Exception as e:
-            logger.error(f"Error extracting messages from checkpoint: {e}")
-            # Fall back to result messages
-            return result.get('messages', []) if result else []
-
     def invoke(self, message: str, thread_id: str):
         try:
             config = {"configurable": {"thread_id": thread_id}}
             checkpointer = memory_manager.get_checkpointer(thread_id)
             thread_graph = self.graph_definition.compile(checkpointer=checkpointer)
             
+            print(f"Invoking agent for thread {thread_id} with message: {message}")
             result = thread_graph.invoke({"messages": [HumanMessage(content=message)]}, config)
             
-            # Safely get final messages
-            final_messages = self._get_final_messages_safely(checkpointer, config, result)
+            print(f"Agent invocation result: {result}")
             
-            # Update vector store with the last 2 messages if available
-            if len(final_messages) >= 2:
-                memory_manager.update_vector_store(thread_id, final_messages[-2:])
-                logger.info(f"Updated vector store for thread {thread_id} with {len(final_messages[-2:])} messages")
-            elif final_messages:
-                memory_manager.update_vector_store(thread_id, final_messages)
-                logger.info(f"Updated vector store for thread {thread_id} with {len(final_messages)} messages")
+            # Extract the final message from the result directly
+            final_messages = result.get("messages", [])
+            final_message = final_messages[-1] if final_messages else None
             
-            final_message = result["messages"][-1] if result.get("messages") else None
+            print(f"Final messages extracted: {len(final_messages)} messages found.")
+            print(f"Final message: {final_message.content if final_message else 'No final message'}")
+            
             return {
                 "success": True,
                 "response": final_message.content if final_message else "No response.",
@@ -188,12 +185,10 @@ Guidelines:
 
     async def stream(self, message: str, thread_id: str):
         config = {"configurable": {"thread_id": thread_id}}
-        # --- MODIFIED: Use the async checkpointer ---
         checkpointer = await memory_manager.get_async_checkpointer(thread_id)
         thread_graph = self.graph_definition.compile(checkpointer=checkpointer)
 
         try:
-            full_response = []
             async for event in thread_graph.astream_events(
                 {"messages": [HumanMessage(content=message)]},
                 config,
@@ -202,25 +197,15 @@ Guidelines:
                 if event["event"] == "on_chat_model_stream":
                     chunk = event["data"]["chunk"]
                     if chunk.content:
-                        full_response.append(chunk.content)
                         yield chunk.content
             
-            # --- UPDATED: Retrieve final state after stream and update memory ---
-            final_graph_state = await thread_graph.aget_state(config)
-            final_messages = final_graph_state.values.get("messages", [])
-
-            if len(final_messages) >= 2:
-                memory_manager.update_vector_store(thread_id, final_messages[-2:])
-                logger.info(f"Updated vector store for thread {thread_id} after streaming.")
-            elif final_messages:
-                memory_manager.update_vector_store(thread_id, final_messages)
-                logger.info(f"Updated vector store for thread {thread_id} after streaming with {len(final_messages)} messages.")
+            # Memory is persisted automatically by the checkpointer.
+            logger.info(f"Streaming finished for thread {thread_id}. Checkpointer has saved the state.")
 
         except Exception as e:
             logger.error(f"Error during agent streaming for thread {thread_id}: {e}", exc_info=True)
             yield f"\n--- ERROR ---\n{str(e)}"
         finally:
-            # Ensure the async connection is closed
             if checkpointer and hasattr(checkpointer.conn, 'close'):
                 await checkpointer.conn.close()
 

@@ -8,6 +8,7 @@ class Config:
     # API Keys
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     BRAVE_API_KEY = os.getenv("BRAVE_API_KEY")
+    HUGGINGFACE_API_KEY_READ_ONLY = os.getenv("HUGGINGFACE_API_KEY_READ_ONLY")
 
     # Model Configuration
     DEFAULT_MODEL = "llama3-70b-8192"
@@ -18,8 +19,8 @@ class Config:
     TIMEOUT = 30
 
     # --- NEW: Memory and Embedding Configuration ---
-    MEMORY_PATH = "./memory"  # Directory to store memory files
-    EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2" # A good, lightweight embedding model
+    MEMORY_PATH = "./memory"  
+    EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2" 
 
     @classmethod
     def validate(cls):
