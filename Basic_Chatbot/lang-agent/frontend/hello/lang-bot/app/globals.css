@@ -1,0 +1,121 @@
+/* Keep your existing @tailwind directives and font imports */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark theme variables (set app to dark by default) */
+:root {
+  --app-bg: #050712; /* deep navy */
+  --app-fg: #e6eef8; /* soft off-white */
+  --app-muted: #94a3b8; /* muted text */
+  --md-text-color: var(--app-fg);
+  --md-border-color: #1f2937;
+  --md-quote-bg: rgba(255,255,255,0.02);
+  --md-table-header-bg: #0b1220;
+  --md-code-block-bg: rgba(255,255,255,0.03);
+}
+
+body {
+  background-color: var(--app-bg) !important;
+  color: var(--app-fg) !important;
+}
+
+/* Ensure Tailwind utility classes that reference bg-background/text-foreground still work */
+.bg-background { background-color: var(--app-bg) !important; }
+.text-foreground { color: var(--app-fg) !important; }
+
+/* --- STYLES FOR MARKDOWN & KATEX --- */
+
+/* General markdown container */
+.markdown-content {
+  line-height: 1.7;
+}
+
+/* Light & Dark mode text and border colors for markdown elements */
+.markdown-content.light {
+  --md-text-color: #333;
+  --md-border-color: #e5e7eb;
+  --md-quote-bg: #f9fafb;
+  --md-table-header-bg: #f3f4f6;
+  --md-code-block-bg: rgba(0, 0, 0, 0.05);
+}
+.markdown-content.dark {
+  --md-text-color: #d1d5db;
+  --md-border-color: #374151;
+  --md-quote-bg: rgba(31, 41, 55, 0.5);
+  --md-table-header-bg: #1f2937;
+  --md-code-block-bg: rgba(0, 0, 0, 0.3);
+}
+
+.markdown-content h1, .markdown-content h2, .markdown-content h3,
+.markdown-content h4, .markdown-content h5, .markdown-content h6,
+.markdown-content strong {
+  color: var(--md-text-color);
+}
+.markdown-content p, .markdown-content ul, .markdown-content ol, .markdown-content blockquote {
+  color: var(--md-text-color);
+}
+.markdown-content blockquote, .markdown-content hr, .markdown-content h1, .markdown-content h2, .markdown-content table, .markdown-content th, .markdown-content td {
+  border-color: var(--md-border-color);
+}
+.markdown-content blockquote {
+  background-color: var(--md-quote-bg);
+}
+.markdown-content thead {
+  background-color: var(--md-table-header-bg);
+}
+.markdown-content a {
+  color: #25c2d1;
+  text-decoration-color: #25c2d1;
+}
+.markdown-content a:hover {
+  color: #99f6ff;
+}
+
+/* Code block styling */
+.code-block-wrapper .hljs {
+  background: var(--md-code-block-bg) !important;
+}
+
+/* --- ENHANCED KATEX STYLING --- */
+
+/* Ensure KaTeX inherits the surrounding text color for perfect blending */
+.katex {
+  font-size: 1.05em !important; /* Slightly larger for readability */
+  color: inherit !important;
+}
+
+/* Inline math: Blends seamlessly with text */
+.math-inline {
+  /* No background color for cleaner look */
+  padding: 0 0.15em;
+}
+
+/* Block math: A clean, padded container for equations */
+.math-display-wrapper {
+  background-color: rgba(17, 24, 39, 0.3); /* Dark, subtle background */
+  border: 1px solid var(--md-border-color);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  transition: background-color 0.3s;
+}
+
+/* Adjust wrapper for light mode */
+.markdown-content.light .math-display-wrapper {
+  background-color: #f9fafb;
+}
+
+.math-display {
+  text-align: center;
+}
+
+/* Improve scrollbar visibility on equation blocks */
+.math-display-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+.math-display-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.5);
+  border-radius: 3px;
+}

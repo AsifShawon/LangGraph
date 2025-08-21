@@ -1,0 +1,16 @@
+langchain
+langgraph
+langchain-core
+fastapi[all]
+langchain-community
+python-dotenv
+langgraph-checkpoint-sqlite
+langchain_huggingface
+faiss-cpu 
+sentence-transformers
+aiosqlite
+pypdf
+langchain-google-genai
+pymupdf
+langchain-ollama
+aiosqlite

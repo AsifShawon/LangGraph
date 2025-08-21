@@ -1,0 +1,7 @@
+/.venv
+
+/LetsChat
+
+*.env
+
+/Basic_Chatbot/lang-agent/.venv
