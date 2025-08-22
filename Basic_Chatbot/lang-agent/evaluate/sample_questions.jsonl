@@ -1,0 +1,12 @@
+{"id": "q1", "q": "A block of mass 2 kg is pushed with a force of 10 N on a frictionless horizontal surface for 3 seconds. What is its final velocity?", "ref": "15", "type": "numerical", "unit": "m/s"}
+{"id": "q2", "q": "What is the gravitational acceleration on Earth near the surface (m/s^2)?", "ref": "9.81", "type": "numerical", "unit": "m/s^2"}
+{"id": "q3", "q": "State Newton's second law in words.", "ref": "The net force acting on an object is equal to the mass of the object times its acceleration.", "type": "conceptual"}
+{"id": "q4", "q": "An electron has charge -1.6e-19 C. What is the magnitude of the charge?", "ref": "1.6e-19", "type": "numerical", "unit": "C"}
+{"id": "q5", "q": "A car accelerates from rest to 60 km/h in 8 seconds. What is its acceleration in m/s^2?", "ref": "2.08", "type": "numerical", "unit": "m/s^2"}
+{"id": "q6", "q": "What is the speed of light in vacuum?", "ref": "3e8", "type": "numerical", "unit": "m/s"}
+{"id": "q7", "q": "Explain the difference between speed and velocity.", "ref": "Speed is a scalar quantity that measures how fast an object moves, while velocity is a vector quantity that includes both speed and direction.", "type": "conceptual"}
+{"id": "q8", "q": "A 5 kg object is dropped from a height of 20 meters. What is its kinetic energy just before hitting the ground? (g = 9.8 m/s^2)", "ref": "980", "type": "numerical", "unit": "J"}
+{"id": "q9", "q": "What is the first law of thermodynamics?", "ref": "Energy cannot be created or destroyed, only transformed from one form to another.", "type": "conceptual"}
+{"id": "q10", "q": "Calculate the force needed to accelerate a 10 kg mass at 5 m/s^2.", "ref": "50", "type": "numerical", "unit": "N"}
+{"id": "q11", "q": "What is the relationship between frequency and wavelength for electromagnetic waves?", "ref": "Frequency and wavelength are inversely proportional; as frequency increases, wavelength decreases, with their product equal to the speed of light.", "type": "conceptual"}
+{"id": "q12", "q": "A spring with spring constant k = 100 N/m is compressed by 0.1 m. What is the potential energy stored?", "ref": "0.5", "type": "numerical", "unit": "J"}
