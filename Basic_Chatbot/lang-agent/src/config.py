@@ -12,10 +12,10 @@ class Config:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
     # Model Configuration
-    DEFAULT_MODEL = "gemini-2.5-flash"
+    DEFAULT_MODEL = "openai/gpt-oss-120b"  # Use Groq model
     TEMPERATURE = 0.1
-    MAX_TOKENS = None
-    TIMEOUT = None
+    MAX_TOKENS = 8192  # Set reasonable limit
+    TIMEOUT = 60  # Set timeout in seconds
     MAX_RETRIES = 2
 
     # Agent Configuration

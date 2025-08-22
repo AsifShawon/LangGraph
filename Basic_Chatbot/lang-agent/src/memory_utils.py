@@ -82,13 +82,25 @@ def upsert_turn_sync(conversation_memory, thread_id: str, user_message: str, ai_
 
         # Upsert full turn (metadata indicates original turn)
         try:
-            conversation_memory.upsert_sync(thread_id, user_message=user_message, ai_reply=ai_reply, metadata={"type": "turn"})
+            if hasattr(conversation_memory, 'upsert_sync'):
+                conversation_memory.upsert_sync(thread_id, user_message=user_message, ai_reply=ai_reply, metadata={"type": "turn"})
+            elif hasattr(conversation_memory, 'upsert'):
+                conversation_memory.upsert(thread_id, user_message=user_message, ai_reply=ai_reply, metadata={"type": "turn"})
+            else:
+                logger.warning("No upsert method available in conversation_memory")
+                return None
         except Exception as e:
             logger.warning(f"Failed to upsert full turn: {e}")
 
         # Upsert short summary with metadata so long-term searches can prefer these
         try:
-            summary_id = conversation_memory.upsert_sync(thread_id, user_message=summary, ai_reply="", metadata={"type": "summary"})
+            if hasattr(conversation_memory, 'upsert_sync'):
+                summary_id = conversation_memory.upsert_sync(thread_id, user_message=summary, ai_reply="", metadata={"type": "summary"})
+            elif hasattr(conversation_memory, 'upsert'):
+                summary_id = conversation_memory.upsert(thread_id, user_message=summary, ai_reply="", metadata={"type": "summary"})
+            else:
+                logger.warning("No upsert method available in conversation_memory")
+                return None
             return summary_id
         except Exception as e:
             logger.warning(f"Failed to upsert summary: {e}")
@@ -112,12 +124,26 @@ async def upsert_turn_async(conversation_memory, thread_id: str, user_message: s
         summary = await loop.run_in_executor(None, summarize_turn, user_message, ai_reply)
 
         try:
-            await conversation_memory.upsert(thread_id, user_message=user_message, ai_reply=ai_reply, metadata={"type": "turn"})
+            if hasattr(conversation_memory, 'upsert'):
+                await conversation_memory.upsert(thread_id, user_message=user_message, ai_reply=ai_reply, metadata={"type": "turn"})
+            elif hasattr(conversation_memory, 'upsert_sync'):
+                # Run sync version in executor for true async
+                await loop.run_in_executor(None, conversation_memory.upsert_sync, thread_id, user_message, ai_reply, {"type": "turn"})
+            else:
+                logger.warning("No upsert method available in conversation_memory")
+                return None
         except Exception as e:
             logger.warning(f"Failed to async upsert full turn: {e}")
 
         try:
-            summary_id = await conversation_memory.upsert(thread_id, user_message=summary, ai_reply="", metadata={"type": "summary"})
+            if hasattr(conversation_memory, 'upsert'):
+                summary_id = await conversation_memory.upsert(thread_id, user_message=summary, ai_reply="", metadata={"type": "summary"})
+            elif hasattr(conversation_memory, 'upsert_sync'):
+                # Run sync version in executor for true async
+                summary_id = await loop.run_in_executor(None, conversation_memory.upsert_sync, thread_id, summary, "", {"type": "summary"})
+            else:
+                logger.warning("No upsert method available in conversation_memory")
+                return None
             return summary_id
         except Exception as e:
             logger.warning(f"Failed to async upsert summary: {e}")
@@ -144,7 +170,14 @@ def get_short_term_context(conversation_memory, thread_id: str, query: str, k: i
         return ""
 
     try:
-        results = conversation_memory.search_sync(query, k=k, thread_id=thread_id)
+        # Check if the method exists
+        if hasattr(conversation_memory, 'search_sync'):
+            results = conversation_memory.search_sync(query, k=k, thread_id=thread_id)
+        elif hasattr(conversation_memory, 'search'):
+            results = conversation_memory.search(query, k=k, thread_id=thread_id)
+        else:
+            logger.warning("No search method available in conversation_memory")
+            return ""
         return _combine_results(results)
     except Exception as e:
         logger.warning(f"Short-term search failed: {e}")
@@ -160,7 +193,14 @@ def get_long_term_context(conversation_memory, query: str, k: int = 10) -> str:
         return ""
 
     try:
-        results = conversation_memory.search_sync(query, k=k)
+        # Check if the method exists
+        if hasattr(conversation_memory, 'search_sync'):
+            results = conversation_memory.search_sync(query, k=k)
+        elif hasattr(conversation_memory, 'search'):
+            results = conversation_memory.search(query, k=k)
+        else:
+            logger.warning("No search method available in conversation_memory")
+            return ""
         # Filter for summary-type results if metadata available
         summary_results = [r for r in results if (r.get("metadata") or {}).get("type") == "summary"]
         if summary_results:

@@ -7,7 +7,6 @@ from typing import Sequence, TypedDict, Annotated, List, Any, Dict
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_core.runnables import RunnableLambda
-# from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -50,6 +49,16 @@ class PhysicsBotAgent:
     def __init__(self):
         Config.validate()
 
+        # LLM setup with enhanced configuration for better performance
+        self.llm = ChatGoogleGenerativeAI(
+            model=Config.DEFAULT_MODEL,
+            temperature=0.1,  # Lower temperature for more consistent calculations
+            max_tokens=Config.MAX_TOKENS,
+            timeout=Config.TIMEOUT,
+            max_retries=0,  # We'll handle retries manually
+            api_key=Config.GEMINI_API_KEY,
+        )
+
         # LLM setup with Groq
         # self.llm = ChatGroq(
         #     model=Config.DEFAULT_MODEL,
@@ -60,15 +69,6 @@ class PhysicsBotAgent:
         #     api_key=Config.GROQ_API_KEY,
         # )
         
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            temperature=0.1,  # Lower temperature for more consistent calculations
-            max_tokens=Config.MAX_TOKENS,
-            timeout=Config.TIMEOUT,
-            max_retries=0,  # We'll handle retries manually
-            api_key=Config.GEMINI_API_KEY,
-        )
-
         # API rate limiting settings
         self.max_retries = 3
         self.base_wait_time = 15  # Increased wait time for quota errors
@@ -164,7 +164,7 @@ Context:
 
     async def _call_llm_with_retry(self, messages, use_tools=False, retry_count=0):
         """Call LLM with intelligent retry logic"""
-        # await self._wait_for_rate_limit()
+        await self._wait_for_rate_limit()
         
         try:
             if use_tools:

@@ -26,7 +26,8 @@ import {
   Plus,
   Sun,
   Moon,
-  ChevronDown
+  ChevronDown,
+  Clock
 } from 'lucide-react';
 import MarkdownRenderer from '../../components/chat/MarkdownRenderer';
 
@@ -46,6 +47,16 @@ interface ChatSession {
   timestamp: Date;
 }
 
+interface BackendMessage {
+  type: string;
+  content: string;
+}
+
+interface ConversationHistory {
+  thread_id: string;
+  messages: BackendMessage[];
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -58,6 +69,9 @@ export default function ChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [openAccordionId, setOpenAccordionId] = useState<string | null>(null);
+  const [availableChats, setAvailableChats] = useState<string[]>([]);
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -74,6 +88,71 @@ export default function ChatPage() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Fetch available chat threads
+  const fetchAvailableChats = useCallback(async () => {
+    setIsLoadingChats(true);
+    try {
+      const response = await fetch('/api/chats');
+      if (response.ok) {
+        const chats = await response.json();
+        setAvailableChats(chats);
+      } else {
+        console.error('Failed to fetch chats');
+      }
+    } catch (error) {
+      console.error('Error fetching chats:', error);
+    } finally {
+      setIsLoadingChats(false);
+    }
+  }, []);
+
+  // Load available chats when sidebar opens
+  useEffect(() => {
+    if (sidebarOpen && availableChats.length === 0) {
+      fetchAvailableChats();
+    }
+  }, [sidebarOpen, availableChats.length, fetchAvailableChats]);
+
+  // Load conversation history for a specific thread
+  const loadConversationHistory = async (threadId: string) => {
+    setIsLoadingHistory(true);
+    try {
+      const response = await fetch(`/api/chats/${threadId}`);
+      if (response.ok) {
+        const data: ConversationHistory = await response.json();
+        const convertedMessages: Message[] = data.messages.map((msg, index) => ({
+          id: `${threadId}-${index}`,
+          content: msg.content,
+          isUser: msg.type === 'HumanMessage',
+          timestamp: new Date(),
+          isTyping: false,
+        }));
+        setMessages(convertedMessages);
+        setActiveThreadId(threadId);
+        setSidebarOpen(false); // Close sidebar on mobile after selecting
+      } else {
+        console.error('Failed to load conversation history');
+      }
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Switch to a different chat thread
+  const switchToChat = (threadId: string) => {
+    if (threadId === activeThreadId) return;
+    loadConversationHistory(threadId);
+  };
+
+  // Generate a title for a chat based on first message
+  const generateChatTitle = (threadId: string): string => {
+    const chatData = availableChats.find(id => id === threadId);
+    if (!chatData) return `Chat ${threadId.slice(-8)}`;
+    return `Chat ${threadId.slice(-8)}`;
+  };
 
   const handleSendMessage = async (content?: string) => {
     const messageContent = content || inputValue.trim();
@@ -138,6 +217,10 @@ export default function ChatPage() {
 
             if (data.type === 'thread_id') {
               setActiveThreadId(data.thread_id);
+              // If this is a new thread, refresh the chat list
+              if (!activeThreadId) {
+                fetchAvailableChats();
+              }
             } else if (data.type === 'thinking') {
               setMessages(prev => prev.map(msg => 
                 msg.id === aiMessageId 
@@ -188,21 +271,18 @@ export default function ChatPage() {
 
   const toggleListening = () => setIsListening(!isListening);
   const copyMessage = (content: string) => navigator.clipboard.writeText(content).catch(err => console.error('Failed to copy:', err));
+  
   const handleClearChat = () => {
     setMessages([]);
     setActiveThreadId(null); 
+    // Refresh available chats list
+    fetchAvailableChats();
   };
+  
   const createNewSession = () => {
-    const newSession: ChatSession = {
-      id: Date.now().toString(),
-      title: `Chat ${chatSessions.length + 1}`,
-      messages: [],
-      timestamp: new Date(),
-    };
-    setChatSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
     setMessages([]);
     setActiveThreadId(null); 
+    setSidebarOpen(false); // Close sidebar on mobile
   };
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
@@ -251,30 +331,68 @@ export default function ChatPage() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4">
-              <h3 className="text-sm font-medium text-gray-400 mb-3">Recent Chats</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-400">Chat History</h3>
+                <button
+                  onClick={fetchAvailableChats}
+                  className="p-1 text-gray-400 hover:text-white transition-colors"
+                  disabled={isLoadingChats}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoadingChats ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+              
               <div className="space-y-2">
-                {chatSessions.map((session) => (
-                  <button
-                    key={session.id}
-                    onClick={() => {
-                      setCurrentSessionId(session.id);
-                      setMessages(session.messages);
-                    }}
-                    className={`w-full text-left p-3 rounded-lg transition-colors group ${
-                      currentSessionId === session.id
-                        ? 'bg-gray-800 text-white'
-                        : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="truncate flex-1">{session.title}</span>
-                      <Trash2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {session.messages.length} messages
-                    </div>
-                  </button>
-                ))}
+                {isLoadingChats ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="p-3 bg-gray-800/50 rounded-lg animate-pulse">
+                        <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
+                        <div className="h-3 bg-gray-700 rounded w-1/2"></div>
+                      </div>
+                    ))}
+                  </div>
+                ) : availableChats.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8">
+                    <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No chat history yet</p>
+                    <p className="text-xs">Start a conversation to see your chats here</p>
+                  </div>
+                ) : (
+                  availableChats.map((threadId) => (
+                    <button
+                      key={threadId}
+                      onClick={() => switchToChat(threadId)}
+                      disabled={isLoadingHistory}
+                      className={`w-full text-left p-3 rounded-lg transition-colors group relative ${
+                        activeThreadId === threadId
+                          ? 'bg-cyan-600/20 border border-cyan-600/30 text-cyan-300'
+                          : 'bg-gray-800/30 hover:bg-gray-800/50 text-gray-300 hover:text-white'
+                      } ${isLoadingHistory ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <MessageCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">
+                            {generateChatTitle(threadId)}
+                          </div>
+                          <div className="flex items-center gap-1 mt-1">
+                            <Clock className="w-3 h-3 opacity-50" />
+                            <span className="text-xs opacity-70">
+                              Thread: {threadId.slice(-8)}...
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {activeThreadId === threadId && (
+                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                          <div className="w-2 h-2 bg-cyan-400 rounded-full"></div>
+                        </div>
+                      )}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
             
@@ -320,7 +438,16 @@ export default function ChatPage() {
                 <h1 className="text-lg font-bold">Physics Chatbot</h1>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  Online
+                  {activeThreadId ? (
+                    <span>
+                      Thread: {activeThreadId.slice(-8)}...
+                      {isLoadingHistory && (
+                        <RefreshCw className="w-3 h-3 animate-spin inline ml-1" />
+                      )}
+                    </span>
+                  ) : (
+                    'Online'
+                  )}
                 </div>
               </div>
             </div>
@@ -352,28 +479,28 @@ export default function ChatPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <button 
-                    onClick={() => setInputValue("What can you help me with?")}
+                    onClick={() => setInputValue("What is physics?")}
                     className="p-3 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors text-left"
                   >
                     💡 Get started
                   </button>
                   <button 
-                    onClick={() => setInputValue("Show me a code example with syntax highlighting")}
+                    onClick={() => setInputValue("Give me a example of quantum physics")}
                     className="p-3 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors text-left"
                   >
-                     Code examples
+                     Quantum Physics
                   </button>
                   <button 
-                    onClick={() => setInputValue("Create a markdown table showing planets and their properties")}
+                    onClick={() => setInputValue("How does the sun give us light?")}
                     className="p-3 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors text-left"
                   >
-                     Tables & Lists
+                    🌌 How does the sun give us light?
                   </button>
                   <button 
-                    onClick={() => setInputValue("Explain **markdown formatting** with examples")}
+                    onClick={() => setInputValue("Explain speed with math examples")}
                     className="p-3 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors text-left"
                   >
-                    ✍️ Markdown demo
+                    ✍️ A math demo on speed
                   </button>
                 </div>
               </div>

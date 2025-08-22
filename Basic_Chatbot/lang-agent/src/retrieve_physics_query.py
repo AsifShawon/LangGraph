@@ -1,7 +1,8 @@
 # physics_query.py
-from langchain_ollama import OllamaEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from config import Config
+import os
 
 # Validate config (if needed)
 Config.validate()
@@ -9,29 +10,57 @@ Config.validate()
 # Paths
 MEMORY_PATH = "./physics_memory"
 
-# Embeddings
-embeddings = OllamaEmbeddings(model="nomic-embed-text:v1.5")
-
-# Load FAISS vectorstore once
-print("🔍 Loading FAISS vectorstore...")
-vectorstore = FAISS.load_local(
-    MEMORY_PATH,
-    embeddings,
-    allow_dangerous_deserialization=True
-)
+# Try to initialize embeddings and vectorstore with fallback
+vectorstore = None
+try:
+    # Try HuggingFace embeddings
+    print("🔍 Initializing HuggingFace embeddings...")
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': False}
+    )
+    
+    # Load FAISS vectorstore once
+    print("🔍 Loading FAISS vectorstore...")
+    if os.path.exists(MEMORY_PATH):
+        vectorstore = FAISS.load_local(
+            MEMORY_PATH,
+            embeddings,
+            allow_dangerous_deserialization=True
+        )
+        print("✅ Physics vectorstore loaded successfully")
+    else:
+        print("⚠️ Physics memory path not found, physics queries will return empty")
+        
+except Exception as e:
+    print(f"⚠️ Failed to load physics vectorstore: {e}")
+    print("Physics queries will return fallback responses")
 
 def query_physics(question: str, k: int = 3) -> str:
     """
     Query the physics FAISS vectorstore and return relevant context.
     """
-    results = vectorstore.similarity_search(question, k=k)
-
-    if not results:
-        return "No relevant physics knowledge found."
-
-    # Join retrieved chunks
-    context_text = "\n\n---\n\n".join([doc.page_content for doc in results])
-    return context_text
+    if vectorstore is None:
+        return "Physics knowledge base not available. Proceeding with general knowledge."
+    
+    try:
+        results = vectorstore.similarity_search(question, k=k)
+        
+        if not results:
+            return "No relevant physics knowledge found."
+        
+        # Combine results into a single context string
+        context_pieces = []
+        for doc in results:
+            content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
+            context_pieces.append(content)
+        
+        return "\n\n---\n\n".join(context_pieces)
+        
+    except Exception as e:
+        print(f"⚠️ Error querying physics vectorstore: {e}")
+        return "Error retrieving physics knowledge. Proceeding with general knowledge."
 
 
 if __name__ == "__main__":
