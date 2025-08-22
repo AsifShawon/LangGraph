@@ -40,14 +40,22 @@ app = FastAPI(
 agent_executor: Optional[PhysicsBotAgent] = None
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     global agent_executor
     try:
+        print("🔧 Initializing agent...")
         agent_executor = create_agent()
         print("✅ Agent has been successfully initialized.")
     except Exception as e:
         print(f"❌ FATAL: Error initializing agent: {e}")
-        raise e
+        import traceback
+        traceback.print_exc()
+        # Don't raise - let the server start but mark agent as unavailable
+        agent_executor = None
+
+@app.on_event("shutdown") 
+async def shutdown_event():
+    print("🛑 Server shutting down...")
 
 # --- API Endpoints ---
 
@@ -80,7 +88,7 @@ async def stream_chat_with_agent(request: ChatRequest):
     It will stream the THINKING phase, then the FINAL ANSWER using Server-Sent Events.
     """
     if not agent_executor:
-        raise HTTPException(status_code=503, detail="Agent is not initialized.")
+        raise HTTPException(status_code=503, detail="Agent is not initialized. Please check server logs for initialization errors.")
 
     thread_id = request.thread_id or str(uuid.uuid4())
 
@@ -91,6 +99,11 @@ async def stream_chat_with_agent(request: ChatRequest):
                 # Each chunk is a dictionary, convert it to a JSON string
                 # and format for Server-Sent Events (SSE)
                 yield f"data: {json.dumps(chunk)}\n\n"
+        except asyncio.CancelledError:
+            # Handle cancellation gracefully
+            logging.info(f"Request cancelled for thread {thread_id}")
+            error_payload = {"type": "error", "content": "Request was cancelled", "thread_id": thread_id}
+            yield f"data: {json.dumps(error_payload)}\n\n"
         except Exception as e:
             logging.error(f"Error during agent streaming for thread {thread_id}: {e}")
             error_payload = {"type": "error", "content": str(e), "thread_id": thread_id}

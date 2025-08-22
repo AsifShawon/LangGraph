@@ -164,7 +164,7 @@ Context:
 
     async def _call_llm_with_retry(self, messages, use_tools=False, retry_count=0):
         """Call LLM with intelligent retry logic"""
-        # await self._wait_for_rate_limit()
+        await self._wait_for_rate_limit()
         
         try:
             if use_tools:
@@ -174,7 +174,7 @@ Context:
             
             # Check for empty response
             if not response or not response.content:
-                logger.warning(f"Received empty response from Gemini (retry {retry_count})")
+                logger.warning(f"Received empty response from LLM (retry {retry_count})")
                 if retry_count < self.max_retries:
                     wait_time = self.base_wait_time * (retry_count + 1)
                     logger.info(f"Retrying after {wait_time} seconds...")
