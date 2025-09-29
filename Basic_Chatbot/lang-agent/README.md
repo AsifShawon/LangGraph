@@ -1,4 +1,4 @@
-# Two-Phased Thinking Raging Bot
+# Two-Phased Thinking RAG Bot
 
 This project implements a sophisticated chatbot that utilizes a "two-phased thinking" process to provide accurate and context-aware responses. The bot is specialized in physics-related queries and leverages a persistent memory to maintain conversation history.
 
